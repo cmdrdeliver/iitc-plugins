@@ -1,0 +1,17 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Backups / scratch
+*.bak
+*.tmp
+
+# Claude Code local session state
+.claude/
