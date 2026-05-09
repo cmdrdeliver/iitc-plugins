@@ -2,14 +2,49 @@
 // @id             iitc-plugin-nearest-portals@cmdrdeliver
 // @name           IITC plugin: Nearest unvisited/uncaptured portals
 // @category       Info
-// @version        0.1.0
+// @version        0.2.20260509
 // @author         CmdrDeLiver
-// @namespace      https://github.com/cmdrdeliver/iitc-nearest-portals
+// @namespace      https://github.com/cmdrdeliver/iitc-plugins
 // @description    Lists the nearest portals you have not visited and/or captured, with export and walking-route planning via OSRM.
+// @updateURL      https://raw.githubusercontent.com/cmdrdeliver/iitc-plugins/main/nearest-portals/nearest-portals.user.js
+// @downloadURL    https://raw.githubusercontent.com/cmdrdeliver/iitc-plugins/main/nearest-portals/nearest-portals.user.js
 // @match          https://intel.ingress.com/*
 // @match          https://intel-x.ingress.com/*
 // @grant          none
 // ==/UserScript==
+
+/* ---------------------------------------------------------------------------
+ * Version history
+ * ---------------------------------------------------------------------------
+ * 0.2.20260509
+ *   - About dialog now reads the version from the userscript header
+ *     (plugin_info.script.version; "undefined" if not available).
+ *   - Added "Show all matched" checkbox that overrides Max count so every
+ *     matching portal in view is listed.
+ *   - Added auto-refresh: when enabled, the list refreshes after each IITC
+ *     map-data load, debounced by a user-adjustable interval (default 750 ms).
+ *   - Version scheme switched to MAJOR.MINOR.YYYYMMDD.
+ *   - Recorded version history in this comment block.
+ *   - Repository moved into the cmdrdeliver/iitc-plugins monorepo;
+ *     @namespace updated and @updateURL/@downloadURL added so userscript
+ *     managers auto-update from raw.githubusercontent.com.
+ *
+ * 0.1.20260508
+ *   - Initial release.
+ *   - Toolbox entry "Nearest portals" opens a dialog.
+ *   - Status filters: all / either / both / unvisited / uncaptured / unscouted.
+ *   - Origin selectable from map center or browser geolocation.
+ *   - Distance list with V/C/S badges; click portal title to pan + open detail.
+ *   - Per-row selection plus master toggle.
+ *   - Export selected portals as CSV (with intel URLs) or GPX waypoints.
+ *   - Multi-stop route via OSRM public demo (foot/bike/car), TSP-optimised,
+ *     drawn as polyline + numbered offset markers in its own layer group.
+ *   - Cool-down warning above MAX_RECOMMENDED_POINTS with link to OSRM
+ *     self-hosting guide.
+ *   - "Dim others on map" highlighter to visually hide non-matched portals.
+ *   - Diagnostic line showing total loaded / matched counts.
+ * ---------------------------------------------------------------------------
+ */
 
 function wrapper(plugin_info) {
   if (typeof window.plugin !== 'function') window.plugin = function () {};
@@ -30,6 +65,7 @@ function wrapper(plugin_info) {
     origin: 'map',         // 'map' | 'geo'
     geoLatLng: null,
     maxCount: 10,
+    showAll: false,        // override maxCount when true
     maxDistanceM: 0,       // 0 = no limit
     selected: {},          // guid -> bool
     lastList: [],          // [{guid, latLng, title, distance}]
@@ -38,6 +74,9 @@ function wrapper(plugin_info) {
     profile: 'foot',
     dimActive: false,
     previousHighlight: null,
+    autoRefresh: false,
+    autoRefreshMs: 750,    // debounce after mapDataRefreshEnd
+    autoRefreshTimer: null,
     diag: { total: 0, kept: 0 }
   };
 
@@ -129,7 +168,7 @@ function wrapper(plugin_info) {
       });
     }
     out.sort(function (a, b) { return a.distance - b.distance; });
-    if (self.state.maxCount > 0) out = out.slice(0, self.state.maxCount);
+    if (!self.state.showAll && self.state.maxCount > 0) out = out.slice(0, self.state.maxCount);
     diag.kept = out.length;
     self.state.diag = diag;
     self.state.lastList = out;
@@ -290,6 +329,27 @@ function wrapper(plugin_info) {
     setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
   };
 
+  // ---- auto-refresh --------------------------------------------------------
+
+  self.scheduleAutoRefresh = function () {
+    if (!self.state.autoRefresh) return;
+    if (self.state.autoRefreshTimer) clearTimeout(self.state.autoRefreshTimer);
+    self.state.autoRefreshTimer = setTimeout(function () {
+      self.state.autoRefreshTimer = null;
+      if (document.getElementById('np-list-container')) {
+        self.refreshDialog();
+      } else {
+        self.buildList(); // keep matchedSet fresh for the dim highlighter
+      }
+    }, Math.max(50, self.state.autoRefreshMs | 0));
+  };
+
+  // ---- version -------------------------------------------------------------
+
+  self.getVersion = function () {
+    return (plugin_info && plugin_info.script && plugin_info.script.version) || 'undefined';
+  };
+
   // ---- about ---------------------------------------------------------------
 
   self.openAbout = function () {
@@ -297,6 +357,7 @@ function wrapper(plugin_info) {
       '<div style="font-size:12px;line-height:1.4;">' +
         '<p><b>Nearest portals</b> — find the closest portals that match a status, ' +
         'export them, and plan a walking/cycling/driving route between them.</p>' +
+        '<p><b>Version:</b> ' + self.escapeHtml(self.getVersion()) + '</p>' +
         '<p><b>Features</b></p>' +
         '<ul style="margin:4px 0 8px 18px;padding:0;">' +
           '<li>Filter by status: all / not visited / not captured / not scouted / either / neither</li>' +
@@ -477,9 +538,13 @@ function wrapper(plugin_info) {
             '<option value="car">Driving</option>' +
           '</select></label>' +
         '<div class="np-break"></div>' +
-        '<label>Max count:<input id="np-max" type="number" min="1" max="500" value="' + self.state.maxCount + '"></label>' +
+        '<label>Max count:<input id="np-max" type="number" min="1" max="500" value="' + self.state.maxCount + '"' + (self.state.showAll ? ' disabled' : '') + '></label>' +
+        '<label title="Ignore Max count and list every matching portal currently loaded."><input id="np-showall" type="checkbox" ' + (self.state.showAll ? 'checked' : '') + '>Show all matched</label>' +
         '<label>Max distance (m, 0=∞):<input id="np-maxdist" type="number" min="0" value="' + self.state.maxDistanceM + '" style="width:6em;"></label>' +
         '<label title="Dim every other portal on the map so only the matched ones are visible."><input id="np-dim" type="checkbox" ' + (self.state.dimActive ? 'checked' : '') + '>Dim others on map</label>' +
+        '<div class="np-break"></div>' +
+        '<label title="Refresh the list automatically each time IITC finishes a map data load."><input id="np-auto" type="checkbox" ' + (self.state.autoRefresh ? 'checked' : '') + '>Auto-refresh</label>' +
+        '<label>Debounce (ms):<input id="np-auto-ms" type="number" min="50" step="50" value="' + self.state.autoRefreshMs + '" style="width:6em;"></label>' +
         '<button id="np-refresh">Refresh</button>' +
       '</div>' +
       '<div id="np-diag" style="font-size:11px;color:#888;margin-bottom:4px;"></div>' +
@@ -529,6 +594,23 @@ function wrapper(plugin_info) {
       self.state.maxCount = isNaN(v) ? 0 : Math.max(0, v);
       self.refreshDialog();
     };
+    document.getElementById('np-showall').onchange = function (e) {
+      self.state.showAll = !!e.target.checked;
+      var maxEl = document.getElementById('np-max');
+      if (maxEl) maxEl.disabled = self.state.showAll;
+      self.refreshDialog();
+    };
+    document.getElementById('np-auto').onchange = function (e) {
+      self.state.autoRefresh = !!e.target.checked;
+      if (!self.state.autoRefresh && self.state.autoRefreshTimer) {
+        clearTimeout(self.state.autoRefreshTimer);
+        self.state.autoRefreshTimer = null;
+      }
+    };
+    document.getElementById('np-auto-ms').onchange = function (e) {
+      var v = parseInt(e.target.value, 10);
+      self.state.autoRefreshMs = isNaN(v) ? 750 : Math.max(50, v);
+    };
     document.getElementById('np-maxdist').onchange = function (e) {
       var v = parseInt(e.target.value, 10);
       self.state.maxDistanceM = isNaN(v) ? 0 : Math.max(0, v);
@@ -559,6 +641,10 @@ function wrapper(plugin_info) {
 
     if (typeof window.addPortalHighlighter === 'function') {
       window.addPortalHighlighter(self.HIGHLIGHTER_NAME, self.dimHighlighter);
+    }
+
+    if (typeof window.addHook === 'function') {
+      window.addHook('mapDataRefreshEnd', function () { self.scheduleAutoRefresh(); });
     }
 
     $('#toolbox').append(' <a onclick="window.plugin.nearestPortals.openDialog();return false;" title="List nearest unvisited/uncaptured portals">Nearest portals</a>');
