@@ -2,7 +2,7 @@
 // @author         EisFrei - fork by DanielOnDiordna - cached fork by CmdrDeLiver
 // @name           IITC plugin: Live Inventory (cached)
 // @category       Info
-// @version        0.0.18.20260511
+// @version        0.0.19.20260511
 // @homepageURL    https://github.com/cmdrdeliver/iitc-plugins
 // @updateURL      https://raw.githubusercontent.com/cmdrdeliver/iitc-plugins/main/live-inventory/live-inventory.user.js
 // @downloadURL    https://raw.githubusercontent.com/cmdrdeliver/iitc-plugins/main/live-inventory/live-inventory.user.js
@@ -26,10 +26,17 @@ function wrapper(plugin_info) {
     self.titleDefault = 'Live Inventory';
     self.titleCached = 'Live Inventory ⚠ CACHED';
     self.title = self.titleDefault;
-    self.version = '0.0.18.20260511';
+    self.version = '0.0.19.20260511';
     self.author = 'EisFrei - fork by DanielOnDiordna - cached fork by CmdrDeLiver';
     self.changelog = `
 Changelog:
+
+version 0.0.19.20260511
+- added a per-row rename button in the Capsules table: click ✎ to rename
+  a named capsule, or + to set a name on an unnamed one. Leave the prompt
+  blank to clear the saved name; existing raw text-area format unchanged.
+- the capsule subdialog's "Rename" button now reuses the same helper and
+  also supports clearing via a blank entry.
 
 version 0.0.18.20260511
 - cached fork by CmdrDeLiver
@@ -226,6 +233,32 @@ version 0.0.17.20210724.002500
             .filter(e => e && e.length === 3)
             .forEach(e => map[e[1]] = e[2]);
         return map;
+    }
+
+    function setCapsuleName(capsuleid, currentname) {
+        const message = 'Enter a name for capsule ' + capsuleid + '.\nLeave blank to clear the saved name.';
+        let newname = prompt(message, currentname || '');
+        if (newname === null) return; // cancel
+        newname = newname.trim();
+        if (newname === (currentname || '')) return; // unchanged
+
+        const capsuleNames = parseCapsuleNames(self.settings.capsuleNames);
+        if (newname === '') {
+            delete capsuleNames[capsuleid];
+        } else {
+            capsuleNames[capsuleid] = newname;
+        }
+        const capsuleNamesList = [];
+        for (const id in capsuleNames) {
+            capsuleNamesList.push(id + ':' + capsuleNames[id]);
+        }
+        self.settings.capsuleNames = capsuleNamesList.join("\n");
+        self.saveSettings();
+        if (window.selectedPortal) {
+            portalDetailsUpdated({guid: window.selectedPortal});
+            showSelectedPortalCapsuleKeys({selectedPortalGuid: window.selectedPortal, unselectedPortalGuid: undefined});
+        }
+        self.updateMenu();
     }
 
     function svgToIcon(str, s) {
@@ -649,7 +682,21 @@ version 0.0.17.20210724.002500
                 }, false);
 
                 let namecell = row.appendChild(document.createElement('td'));
-                namecell.textContent = (capsuleNames[el.id] || '');
+                let nameSpan = namecell.appendChild(document.createElement('span'));
+                nameSpan.textContent = (capsuleNames[el.id] || '');
+                nameSpan.style.marginRight = '6px';
+                let renamebutton = namecell.appendChild(document.createElement('input'));
+                renamebutton.type = 'button';
+                renamebutton.value = capsuleNames[el.id] ? '✎' : '+';
+                renamebutton.title = capsuleNames[el.id]
+                    ? 'Rename or clear name for ' + el.id
+                    : 'Set name for ' + el.id;
+                renamebutton.style.padding = '0 6px';
+                renamebutton.style.fontSize = '11px';
+                renamebutton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    setCapsuleName(el.id, capsuleNames[el.id]);
+                }, false);
 
                 let countcell = row.appendChild(document.createElement('td'));
                 countcell.align = 'right';
@@ -1609,23 +1656,8 @@ version 0.0.17.20210724.002500
             height: (isSmartphone() ? 'auto' : dialogheight)
         }).dialog('option', 'buttons', { ...buttons,
             'Rename': function () {
-                let newname = prompt('Enter new capsule name (' + capsuleid + '):',capsulename);
-                if (newname == null || newname == capsulename) return;
-
-                let capsuleNames = parseCapsuleNames(self.settings.capsuleNames);
-                capsuleNames[capsuleid] = newname;
-                let capsuleNamesList = [];
-                for (const id in capsuleNames) {
-                    capsuleNamesList.push(id + ':' + capsuleNames[id]);
-                }
-                self.settings.capsuleNames = capsuleNamesList.join("\n");
-                self.saveSettings();
-                if (window.selectedPortal) {
-                    portalDetailsUpdated({guid:window.selectedPortal});
-                    showSelectedPortalCapsuleKeys({selectedPortalGuid: window.selectedPortal, unselectedPortalGuid: undefined});
-                }
-                self.updateMenu();
-                showCapsuleContent(capsuleid,submenu);
+                setCapsuleName(capsuleid, capsulename);
+                showCapsuleContent(capsuleid, submenu);
             },
             'Close': function () {
                 $(this).dialog('close');
