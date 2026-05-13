@@ -2,7 +2,7 @@
 // @id             iitc-plugin-discord-portal-link@cmdrdeliver
 // @name           IITC plugin: Discord portal link
 // @category       Info
-// @version        0.4.20260513
+// @version        0.5.20260513
 // @author         CmdrDeLiver
 // @namespace      https://github.com/cmdrdeliver/iitc-plugins
 // @description    Adds a clickable Discord icon to the portal details panel. Click for a popup menu: quick markdown link or a detailed Discord paste (owner, range, links, resonators, mods, computed effects).
@@ -16,6 +16,20 @@
 /* ---------------------------------------------------------------------------
  * Version history
  * ---------------------------------------------------------------------------
+ * 0.5.20260513
+ *   - Detailed paste now ships in a Discord ```ansi``` block so agent
+ *     names and team tags render in the appropriate faction colour:
+ *     RES = blue, ENL = green, NEU = yellow (closest 8-colour proxy
+ *     for orange), Machina = red. The (friendly)/(enemy)/(neutral)/
+ *     (machina) tag on the Effects line also takes its colour from
+ *     the relation.
+ *   - teamLabel() now recognises Machina (data.team starting with 'M')
+ *     and portalRelation() returns 'machina' for cooldown labelling;
+ *     Machina portals still use the 300-second enemy base for cooldown.
+ *   - Both the quick "Copy link" and the detailed-paste header now
+ *     wrap the intel URL in <…> so Discord suppresses the auto-embed
+ *     preview.
+ *
  * 0.4.20260513
  *   - Hack-cooldown base now depends on the player's faction vs the portal's
  *     team: friendly portals use 180 s, enemy/neutral portals use 300 s.
@@ -131,7 +145,8 @@ function wrapper(plugin_info) {
   };
 
   self.buildDiscordLink = function (portal) {
-    return '[' + self.escapeMd(portal.title) + '](' + self.intelUrl(portal) + ')';
+    // Angle brackets around the URL suppress Discord's auto-embed preview.
+    return '[' + self.escapeMd(portal.title) + '](<' + self.intelUrl(portal) + '>)';
   };
 
   self.teamLabel = function (t) {
@@ -139,7 +154,45 @@ function wrapper(plugin_info) {
     var s = String(t).toUpperCase();
     if (s.charAt(0) === 'R') return 'RES';
     if (s.charAt(0) === 'E') return 'ENL';
+    if (s.charAt(0) === 'M') return 'MAC';
     return 'NEU';
+  };
+
+  // ANSI escape sequences for Discord's ```ansi``` code blocks.
+  // Discord's renderer honours the standard 8-colour palette plus reset.
+  self.ANSI = {
+    RESET:  '\x1b[0m',
+    RED:    '\x1b[31m',
+    GREEN:  '\x1b[32m',
+    YELLOW: '\x1b[33m',
+    BLUE:   '\x1b[34m'
+  };
+
+  // Discord's palette has no true orange, so NEU borrows yellow as the
+  // closest 8-colour approximation.
+  self.teamColor = function (teamTag) {
+    switch (teamTag) {
+      case 'RES': return self.ANSI.BLUE;
+      case 'ENL': return self.ANSI.GREEN;
+      case 'MAC': return self.ANSI.RED;
+      case 'NEU': return self.ANSI.YELLOW;
+      default:    return '';
+    }
+  };
+
+  self.relationColor = function (relation) {
+    switch (relation) {
+      case 'friendly': return self.ANSI.GREEN;
+      case 'enemy':    return self.ANSI.RED;
+      case 'machina':  return self.ANSI.RED;
+      case 'neutral':  return self.ANSI.YELLOW;
+      default:         return '';
+    }
+  };
+
+  self.colorize = function (text, color) {
+    if (!color) return String(text);
+    return color + String(text) + self.ANSI.RESET;
   };
 
   // window.PLAYER is populated by IITC after login. .team is the full faction
@@ -154,10 +207,11 @@ function wrapper(plugin_info) {
     return null;
   };
 
-  // 'friendly' | 'enemy' | 'neutral' | 'unknown'
+  // 'friendly' | 'enemy' | 'neutral' | 'machina' | 'unknown'
   self.portalRelation = function (portalTeam) {
     var portal = self.teamLabel(portalTeam);
     if (portal === 'NEU') return 'neutral';
+    if (portal === 'MAC') return 'machina';
     var player = self.playerFaction();
     if (!player) return 'unknown';
     return player === portal ? 'friendly' : 'enemy';
@@ -264,10 +318,11 @@ function wrapper(plugin_info) {
     var resos = d.resonators || [];
     var mods  = d.mods || [];
 
-    var header = '**[' + self.escapeMd(portal.title) + '](' + self.intelUrl(portal) + ')**';
+    var header = '**[' + self.escapeMd(portal.title) + '](<' + self.intelUrl(portal) + '>)**';
 
     var owner    = d.owner || '—';
-    var team     = self.teamLabel(d.team);
+    var teamTag  = self.teamLabel(d.team);
+    var teamCol  = self.teamColor(teamTag);
     var level    = d.level || 0;
     var health   = d.health != null ? Math.round(d.health) : Math.round(self.portalHealth(resos));
     var mean     = self.meanResoLevel(resos);
@@ -276,8 +331,11 @@ function wrapper(plugin_info) {
     var relation = self.portalRelation(d.team);
     var eff      = self.modEffects(mods, relation);
 
+    var ownerC   = self.colorize(owner,   teamCol);
+    var teamC    = self.colorize(teamTag, teamCol);
+
     var body = [];
-    body.push('Owner: ' + owner + ' (L' + level + ', ' + team + ')  ·  Health: ' + health + '%');
+    body.push('Owner: ' + ownerC + ' (L' + level + ', ' + teamC + ')  ·  Health: ' + health + '%');
     body.push('Range: ' + self.formatRange(range) + '  ·  Links: ' + links.out + ' out / ' + links.in + ' in');
 
     body.push('Resonators:');
@@ -288,10 +346,12 @@ function wrapper(plugin_info) {
         body.push('  ' + label + ': —');
         continue;
       }
-      var max  = self.RESO_MAX[r.level] || 1;
-      var pct  = Math.round((r.energy / max) * 100);
-      var lvl  = 'L' + r.level;
-      body.push('  ' + label + ': ' + lvl + ' ' + (r.owner || '?') + ' ' + self.padLeft(pct + '%', 4));
+      var max   = self.RESO_MAX[r.level] || 1;
+      var pct   = Math.round((r.energy / max) * 100);
+      var lvl   = 'L' + r.level;
+      // Resonators always match portal team, so reuse teamCol for the agent.
+      var agent = self.colorize(r.owner || '?', teamCol);
+      body.push('  ' + label + ': ' + lvl + ' ' + agent + ' ' + self.padLeft(pct + '%', 4));
     }
 
     var modStrs = [];
@@ -301,16 +361,19 @@ function wrapper(plugin_info) {
       var abbr = self.MOD_ABBREV[mm.name] || mm.name;
       var rar  = self.normalizeRarity(mm.rarity);
       var rs   = self.RARITY_ABBREV[rar] || rar;
-      modStrs.push(abbr + '-' + rs + ' (' + (mm.owner || '?') + ')');
+      // Mods can only be installed on a friendly portal, so installer
+      // shares the portal's team colour.
+      var installer = self.colorize(mm.owner || '?', teamCol);
+      modStrs.push(abbr + '-' + rs + ' (' + installer + ')');
     }
     body.push('Mods: ' + (modStrs.length ? modStrs.join(' · ') : '—'));
 
+    var relC = self.colorize(self.relationLabel(relation), self.relationColor(relation));
     body.push('Effects: ' + eff.maxOut + ' max outbound · ' +
               eff.maxHacks + ' hacks · ' +
-              self.formatCooldown(eff.cooldown) + ' cooldown (' +
-              self.relationLabel(relation) + ')');
+              self.formatCooldown(eff.cooldown) + ' cooldown (' + relC + ')');
 
-    return header + '\n```\n' + body.join('\n') + '\n```';
+    return header + '\n```ansi\n' + body.join('\n') + '\n```';
   };
 
   // ---- clipboard ------------------------------------------------------------

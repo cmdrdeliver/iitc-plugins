@@ -22,8 +22,8 @@ Requires IITC-CE and a userscript manager (Tampermonkey or Violentmonkey).
 ### Detailed paste format
 
 ```
-**[Portal Name](https://intel.ingress.com/intel?pll=lat,lng)**
-` ` `
+**[Portal Name](<https://intel.ingress.com/intel?pll=lat,lng>)**
+` ` `ansi
 Owner: AgentX (L8, RES)  ·  Health: 96%
 Range: 4.21 km  ·  Links: 7 out / 3 in
 Resonators:
@@ -35,11 +35,24 @@ Effects: 16 max outbound · 12 hacks · 0:54 cooldown (friendly)
 ` ` `
 ```
 
+The body sits in a Discord `ansi`-tagged code block so agent names and team tags render in faction colour:
+
+| Team | Colour |
+|---|---|
+| RES | blue |
+| ENL | green |
+| NEU | yellow (closest 8-colour proxy for orange) |
+| MAC (Machina) | red |
+
+The `(friendly)` / `(enemy)` / `(neutral)` / `(machina)` tag on the **Effects** line is coloured to match its relation. Discord on older mobile clients may render the raw ANSI escape codes instead of suppressing them — a cosmetic-only regression on those builds.
+
+The header link wraps the URL in `<…>` so Discord won't generate a preview embed for the detailed paste.
+
 The **Effects** line reflects the actual values implied by installed mods:
 
 - **Max outbound links** — default 8; each SBUL adds +8.
 - **Hacks before burnout** — default 4; Multi-hack adds +4 (Common), +8 (Rare), or +12 (Very Rare).
-- **Hack cooldown** — base depends on your faction vs the portal's team: **3:00** for a friendly portal, **5:00** for an enemy or neutral portal. Heat Sink then multiplies the base by 0.8 (C), 0.5 (R), or 0.3 (VR), stacking multiplicatively. The label in parentheses on the **Effects** line shows which base was used; it reads `(faction unknown)` if IITC hasn't populated `window.PLAYER` yet.
+- **Hack cooldown** — base depends on your faction vs the portal's team: **3:00** for a friendly portal, **5:00** for an enemy, neutral, or Machina portal. Heat Sink then multiplies the base by 0.8 (C), 0.5 (R), or 0.3 (VR), stacking multiplicatively. The label in parentheses on the **Effects** line shows which base was used; it reads `(faction unknown)` if IITC hasn't populated `window.PLAYER` yet.
 
 ## Notes
 
