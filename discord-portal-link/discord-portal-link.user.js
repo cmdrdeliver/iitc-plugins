@@ -2,7 +2,7 @@
 // @id             iitc-plugin-discord-portal-link@cmdrdeliver
 // @name           IITC plugin: Discord portal link
 // @category       Info
-// @version        0.5.20260513
+// @version        0.6.20260513
 // @author         CmdrDeLiver
 // @namespace      https://github.com/cmdrdeliver/iitc-plugins
 // @description    Adds a clickable Discord icon to the portal details panel. Click for a popup menu: quick markdown link or a detailed Discord paste (owner, range, links, resonators, mods, computed effects).
@@ -16,6 +16,11 @@
 /* ---------------------------------------------------------------------------
  * Version history
  * ---------------------------------------------------------------------------
+ * 0.6.20260513
+ *   - Faction-coloured tokens (owner, team tag, resonator/mod agents,
+ *     relation label) now render bold via ANSI "1;<colour>" so they
+ *     stand out against the surrounding text in the detailed paste.
+ *
  * 0.5.20260513
  *   - Detailed paste now ships in a Discord ```ansi``` block so agent
  *     names and team tags render in the appropriate faction colour:
@@ -162,10 +167,10 @@ function wrapper(plugin_info) {
   // Discord's renderer honours the standard 8-colour palette plus reset.
   self.ANSI = {
     RESET:  '\x1b[0m',
-    RED:    '\x1b[31m',
-    GREEN:  '\x1b[32m',
-    YELLOW: '\x1b[33m',
-    BLUE:   '\x1b[34m'
+    RED:    '\x1b[1;31m',
+    GREEN:  '\x1b[1;32m',
+    YELLOW: '\x1b[1;33m',
+    BLUE:   '\x1b[1;34m'
   };
 
   // Discord's palette has no true orange, so NEU borrows yellow as the
