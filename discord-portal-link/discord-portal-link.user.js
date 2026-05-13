@@ -2,7 +2,7 @@
 // @id             iitc-plugin-discord-portal-link@cmdrdeliver
 // @name           IITC plugin: Discord portal link
 // @category       Info
-// @version        0.7.20260513
+// @version        0.8.20260513
 // @author         CmdrDeLiver
 // @namespace      https://github.com/cmdrdeliver/iitc-plugins
 // @description    Adds a clickable Discord icon to the portal details panel. Click for a popup menu: quick markdown link or a detailed Discord paste (owner, range, links, resonators, mods, computed effects).
@@ -16,6 +16,23 @@
 /* ---------------------------------------------------------------------------
  * Version history
  * ---------------------------------------------------------------------------
+ * 0.8.20260513
+ *   - Effects block now delegates to IITC's own mod-stat functions
+ *     (getMaxOutgoingLinks, getPortalHackDetails, getLinkAmpRangeBoost,
+ *     getPortalShieldMitigation, getPortalLinkDefenseBoost,
+ *     getPortalAttackValues) so the numbers match what the portal panel
+ *     shows. IITC's getPortalHackDetails already handles the friendly
+ *     180 s / enemy 300 s cooldown base, so the plugin no longer needs
+ *     its own faction-vs-portal logic for that.
+ *   - Effects expanded to multi-line block: outbound cap, hacks @
+ *     cooldown (burnout), and conditional lines for range boost (LA),
+ *     defense (shield + link def boost), and attack (force/freq/hit).
+ *     Conditional lines are omitted when the corresponding mods aren't
+ *     installed.
+ *   - Removed unused portalRelation / playerFaction / baseCooldown
+ *     helpers and the SBUL/MH/HS local constants. IITC owns these now,
+ *     with conservative fallbacks if its functions aren't exposed.
+ *
  * 0.7.20260513
  *   - Resonator readout is now a two-column compass layout:
  *       N | NE     (top)
@@ -105,17 +122,11 @@ function wrapper(plugin_info) {
   self.OCTANTS = ['E', 'NE', 'N', 'NW', 'W', 'SW', 'S', 'SE'];
   // Max energy per resonator level. Index = level.
   self.RESO_MAX = [0, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 6000];
-  // Default max outbound link cap, default hack count before burnout, and
-  // default hack cooldown (seconds). Mods adjust these.
-  self.DEFAULT_MAX_LINKS = 8;
-  self.DEFAULT_MAX_HACKS = 4;
-  // Hack cooldown depends on whether the portal is friendly to the player.
-  self.DEFAULT_COOLDOWN_FRIENDLY_S = 180;
-  self.DEFAULT_COOLDOWN_ENEMY_S    = 300;
-  // Per-mod bonuses. SBUL is always Very Rare in current Ingress.
-  self.SBUL_BONUS = 8;
-  self.MH_BONUS  = { COMMON: 4,   RARE: 8,   VERY_RARE: 12 };
-  self.HS_MULT   = { COMMON: 0.8, RARE: 0.5, VERY_RARE: 0.3 };
+  // Conservative fallbacks if IITC's mod-stat helpers aren't exposed on
+  // this build. IITC owns the canonical math for everything else.
+  self.FALLBACK_MAX_LINKS    = 8;
+  self.FALLBACK_MAX_HACKS    = 4;
+  self.FALLBACK_COOLDOWN_S   = 300;
   // Short forms used in the paste.
   self.MOD_ABBREV = {
     'SoftBank Ultra Link': 'SBUL',
@@ -206,33 +217,6 @@ function wrapper(plugin_info) {
     return color + String(text) + self.ANSI.RESET;
   };
 
-  // window.PLAYER is populated by IITC after login. .team is the full faction
-  // name ('RESISTANCE' / 'ENLIGHTENED') in modern builds. Returns 'RES',
-  // 'ENL', or null if the faction can't be determined.
-  self.playerFaction = function () {
-    var t = window.PLAYER && window.PLAYER.team;
-    if (!t) return null;
-    var s = String(t).toUpperCase();
-    if (s.charAt(0) === 'R') return 'RES';
-    if (s.charAt(0) === 'E') return 'ENL';
-    return null;
-  };
-
-  // 'friendly' | 'enemy' | 'neutral' | 'machina' | 'unknown'
-  self.portalRelation = function (portalTeam) {
-    var portal = self.teamLabel(portalTeam);
-    if (portal === 'NEU') return 'neutral';
-    if (portal === 'MAC') return 'machina';
-    var player = self.playerFaction();
-    if (!player) return 'unknown';
-    return player === portal ? 'friendly' : 'enemy';
-  };
-
-  self.baseCooldown = function (relation) {
-    return relation === 'friendly' ? self.DEFAULT_COOLDOWN_FRIENDLY_S
-                                   : self.DEFAULT_COOLDOWN_ENEMY_S;
-  };
-
   self.formatRange = function (m) {
     if (m >= 1000) return (m / 1000).toFixed(2) + ' km';
     return Math.round(m) + ' m';
@@ -243,6 +227,11 @@ function wrapper(plugin_info) {
     var m = Math.floor(s / 60);
     var r = s % 60;
     return m + ':' + (r < 10 ? '0' : '') + r;
+  };
+
+  // 2 → "2", 2.5 → "2.5", 2.05 → "2.05" — trims trailing zeros for tidy display.
+  self.formatBoost = function (v) {
+    return (Math.round(v * 100) / 100).toString();
   };
 
   self.padRight = function (s, n) {
@@ -323,24 +312,47 @@ function wrapper(plugin_info) {
     return String(raw || '').toUpperCase().replace(/[ -]/g, '_');
   };
 
-  self.modEffects = function (mods, relation) {
-    var maxOut   = self.DEFAULT_MAX_LINKS;
-    var maxHacks = self.DEFAULT_MAX_HACKS;
-    var cooldown = self.baseCooldown(relation);
-    for (var i = 0; i < (mods || []).length; i++) {
-      var m = mods[i];
-      if (!m) continue;
-      var name = m.name || '';
-      var rar  = self.normalizeRarity(m.rarity);
-      if (name === 'SoftBank Ultra Link') {
-        maxOut += self.SBUL_BONUS;
-      } else if (name === 'Multi-hack') {
-        maxHacks += (self.MH_BONUS[rar] || 0);
-      } else if (name === 'Heat Sink') {
-        cooldown *= (self.HS_MULT[rar] != null ? self.HS_MULT[rar] : 1);
+  // Pull mod-effect values from IITC's own helpers. Each call is wrapped in
+  // a try/catch with a conservative fallback so a missing/broken helper
+  // can't break the whole paste.
+  self.modEffects = function (d) {
+    var eff = {
+      maxOut:       self.FALLBACK_MAX_LINKS,
+      hacks:        self.FALLBACK_MAX_HACKS,
+      cooldown:     self.FALLBACK_COOLDOWN_S,
+      burnout:      self.FALLBACK_COOLDOWN_S * (self.FALLBACK_MAX_HACKS - 1),
+      rangeBoost:   1,
+      shieldMit:    0,
+      linkDefBoost: 1,
+      forceAmp:     0,
+      attackFreq:   0,
+      hitBonus:     0
+    };
+    self.tryCall(function () { eff.maxOut       = window.getMaxOutgoingLinks(d); });
+    self.tryCall(function () {
+      var h = window.getPortalHackDetails(d);
+      if (h) {
+        if (typeof h.hacks    === 'number') eff.hacks    = h.hacks;
+        if (typeof h.cooldown === 'number') eff.cooldown = h.cooldown;
+        if (typeof h.burnout  === 'number') eff.burnout  = h.burnout;
       }
-    }
-    return { maxOut: maxOut, maxHacks: maxHacks, cooldown: cooldown };
+    });
+    self.tryCall(function () { eff.rangeBoost   = window.getLinkAmpRangeBoost(d);    });
+    self.tryCall(function () { eff.shieldMit    = window.getPortalShieldMitigation(d); });
+    self.tryCall(function () { eff.linkDefBoost = window.getPortalLinkDefenseBoost(d); });
+    self.tryCall(function () {
+      var av = window.getPortalAttackValues(d);
+      if (av) {
+        if (typeof av.force_amplifier  === 'number') eff.forceAmp   = av.force_amplifier;
+        if (typeof av.attack_frequency === 'number') eff.attackFreq = av.attack_frequency;
+        if (typeof av.hit_bonus        === 'number') eff.hitBonus   = av.hit_bonus;
+      }
+    });
+    return eff;
+  };
+
+  self.tryCall = function (fn) {
+    try { fn(); } catch (e) { /* leave the fallback in place */ }
   };
 
   // ---- detailed paste -------------------------------------------------------
@@ -360,15 +372,17 @@ function wrapper(plugin_info) {
     var mean     = self.meanResoLevel(resos);
     var range    = self.getRange(d, mean);
     var links    = self.countLinks(portal.guid);
-    var relation = self.portalRelation(d.team);
-    var eff      = self.modEffects(mods, relation);
+    var eff      = self.modEffects(d);
 
     var ownerC = self.colorize(owner,   teamCol);
     var teamC  = self.colorize(teamTag, teamCol);
 
+    var rangeText = self.formatRange(range);
+    if (eff.rangeBoost > 1) rangeText += ' (×' + self.formatBoost(eff.rangeBoost) + ')';
+
     var body = [];
     body.push('Owner: ' + ownerC + ' (L' + level + ', ' + teamC + ')  ·  Health: ' + health + '%');
-    body.push('Range: ' + self.formatRange(range) + '  ·  Links: ' + links.out + ' out / ' + links.in + ' in');
+    body.push('Range: ' + rangeText + '  ·  Links: ' + links.out + ' out / ' + links.in + ' in');
 
     body.push('Resonators:');
     // Two-column compass layout, top to bottom.
@@ -403,9 +417,27 @@ function wrapper(plugin_info) {
     }
     body.push('Mods: ' + (modStrs.length ? modStrs.join(' · ') : '—'));
 
-    body.push('Effects: ' + eff.maxOut + ' max outbound · ' +
-              eff.maxHacks + ' hacks · ' +
-              self.formatCooldown(eff.cooldown) + ' cooldown');
+    // Build the Effects block. Always-relevant line first, then optional
+    // lines for range/defense/attack only when mods actually do something.
+    var effLines = [];
+    effLines.push('Outbound: ' + eff.maxOut +
+                  '  ·  Hacks: ' + eff.hacks +
+                  ' @ ' + self.formatCooldown(eff.cooldown) +
+                  ' (burnout ' + self.formatCooldown(eff.burnout) + ')');
+
+    var defParts = [];
+    if (eff.shieldMit    > 0) defParts.push('shield ' + eff.shieldMit + '%');
+    if (eff.linkDefBoost > 1) defParts.push('links ×' + self.formatBoost(eff.linkDefBoost));
+    if (defParts.length) effLines.push('Defense: ' + defParts.join(' · '));
+
+    var attParts = [];
+    if (eff.forceAmp   > 0) attParts.push('force ×' + self.formatBoost(eff.forceAmp));
+    if (eff.attackFreq > 0) attParts.push('freq ×'  + self.formatBoost(eff.attackFreq));
+    if (eff.hitBonus   > 0) attParts.push('hit +'   + Math.round(eff.hitBonus * 100) + '%');
+    if (attParts.length) effLines.push('Attack: ' + attParts.join(' · '));
+
+    body.push('Effects:');
+    for (var ei = 0; ei < effLines.length; ei++) body.push('  ' + effLines[ei]);
 
     return header + '\n```ansi\n' + body.join('\n') + '\n```';
   };

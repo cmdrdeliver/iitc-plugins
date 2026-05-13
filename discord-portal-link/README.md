@@ -25,14 +25,17 @@ Requires IITC-CE and a userscript manager (Tampermonkey or Violentmonkey).
 **[Portal Name](<https://intel.ingress.com/intel?pll=lat,lng>)**
 ` ` `ansi
 Owner: AgentX (L8, RES)  ·  Health: 96%
-Range: 4.21 km  ·  Links: 7 out / 3 in
+Range: 8.42 km (×2)  ·  Links: 7 out / 3 in
 Resonators:
   N : L8 AgentX 100%   NE: L8 AgentY  95%
   NW: L7 AgentZ  88%   E : L8 AgentA  91%
   W : L8 AgentB 100%   SE: L6 AgentC  70%
   SW: L8 AgentD  99%   S : L7 AgentE  82%
-Mods: SBUL-VR · MH-R · HS-VR · —
-Effects: 16 max outbound · 12 hacks · 0:54 cooldown
+Mods: SBUL-VR · MH-R · HS-VR · LA-R
+Effects:
+  Outbound: 16  ·  Hacks: 12 @ 0:54 (burnout 9:54)
+  Defense: shield 70% · links ×3.5
+  Attack: force ×2.5 · freq ×2 · hit +5%
 ` ` `
 ```
 
@@ -49,13 +52,9 @@ Discord on older mobile clients may render the raw ANSI escape codes instead of 
 
 Both the quick link and the detailed-paste header wrap the URL in `<…>` so Discord won't generate a preview embed.
 
-Resonators are listed in a two-column compass layout (N/NE, NW/E, W/SE, SW/S), top to bottom. The link-range value is pulled from IITC's own `getPortalRange()` so it matches the portal panel and the intel map, including Link Amp boosts.
+Resonators are listed in a two-column compass layout (N/NE, NW/E, W/SE, SW/S), top to bottom.
 
-The **Effects** line reflects the actual values implied by installed mods:
-
-- **Max outbound links** — default 8; each SBUL adds +8.
-- **Hacks before burnout** — default 4; Multi-hack adds +4 (Common), +8 (Rare), or +12 (Very Rare).
-- **Hack cooldown** — base depends on your faction vs the portal's team: **3:00** for a friendly portal, **5:00** for an enemy, neutral, or Machina portal. Heat Sink then multiplies the base by 0.8 (C), 0.5 (R), or 0.3 (VR), stacking multiplicatively. The cooldown base is not labelled in the paste because the team-coloured team tag already conveys the relation.
+Mod-effect values (outbound cap, hack count, hack cooldown, burnout duration, range boost, shield mitigation, link defense, attack force/frequency/hit bonus) are pulled from IITC's own `window.getMaxOutgoingLinks` / `getPortalHackDetails` / `getLinkAmpRangeBoost` / `getPortalShieldMitigation` / `getPortalLinkDefenseBoost` / `getPortalAttackValues` so they match what IITC's portal panel computes. The hack cooldown reflects IITC's friendly-portal logic automatically (180 s for own faction vs 300 s for enemy/neutral/Machina). The **Defense** and **Attack** lines only appear when at least one corresponding mod is installed.
 
 ## Notes
 
