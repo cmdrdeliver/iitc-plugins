@@ -2,7 +2,7 @@
 // @id             iitc-plugin-discord-portal-link@cmdrdeliver
 // @name           IITC plugin: Discord portal link
 // @category       Info
-// @version        0.6.20260513
+// @version        0.7.20260513
 // @author         CmdrDeLiver
 // @namespace      https://github.com/cmdrdeliver/iitc-plugins
 // @description    Adds a clickable Discord icon to the portal details panel. Click for a popup menu: quick markdown link or a detailed Discord paste (owner, range, links, resonators, mods, computed effects).
@@ -16,6 +16,22 @@
 /* ---------------------------------------------------------------------------
  * Version history
  * ---------------------------------------------------------------------------
+ * 0.7.20260513
+ *   - Resonator readout is now a two-column compass layout:
+ *       N | NE     (top)
+ *       NW| E
+ *       W | SE
+ *       SW| S      (bottom)
+ *   - Mod list no longer includes the installer name.
+ *   - Link-range value now delegates to IITC's window.getPortalRange()
+ *     so it matches what the portal panel and the intel map show
+ *     (and so it picks up Link Amp boosts). Falls back to the bare
+ *     160 × meanLevel^4 formula if getPortalRange isn't exposed.
+ *   - Dropped the (friendly)/(enemy)/(neutral)/(machina) tag from the
+ *     Effects line; the team colouring of the team tag makes it
+ *     redundant. Cooldown base still derives from player-vs-portal
+ *     team internally.
+ *
  * 0.6.20260513
  *   - Faction-coloured tokens (owner, team tag, resonator/mod agents,
  *     relation label) now render bold via ANSI "1;<colour>" so they
@@ -185,16 +201,6 @@ function wrapper(plugin_info) {
     }
   };
 
-  self.relationColor = function (relation) {
-    switch (relation) {
-      case 'friendly': return self.ANSI.GREEN;
-      case 'enemy':    return self.ANSI.RED;
-      case 'machina':  return self.ANSI.RED;
-      case 'neutral':  return self.ANSI.YELLOW;
-      default:         return '';
-    }
-  };
-
   self.colorize = function (text, color) {
     if (!color) return String(text);
     return color + String(text) + self.ANSI.RESET;
@@ -227,10 +233,6 @@ function wrapper(plugin_info) {
                                    : self.DEFAULT_COOLDOWN_ENEMY_S;
   };
 
-  self.relationLabel = function (relation) {
-    return relation === 'unknown' ? 'faction unknown' : relation;
-  };
-
   self.formatRange = function (m) {
     if (m >= 1000) return (m / 1000).toFixed(2) + ' km';
     return Math.round(m) + ' m';
@@ -252,6 +254,17 @@ function wrapper(plugin_info) {
   self.padLeft = function (s, n) {
     s = String(s);
     while (s.length < n) s = ' ' + s;
+    return s;
+  };
+
+  // Strip ANSI escape sequences so padding reflects what Discord actually shows.
+  self.visibleLen = function (s) {
+    return String(s).replace(/\x1b\[[0-9;]*m/g, '').length;
+  };
+
+  self.padCell = function (s, n) {
+    var pad = n - self.visibleLen(s);
+    while (pad-- > 0) s += ' ';
     return s;
   };
 
@@ -278,6 +291,20 @@ function wrapper(plugin_info) {
       if (r && r.level) sum += r.level;
     }
     return sum / 8;
+  };
+
+  // Prefer IITC's own range calc so we match what the portal panel shows
+  // (and so we pick up Link Amp boosts). Fall back to the bare formula
+  // if IITC isn't exposing the function on this build.
+  self.getRange = function (d, meanLevel) {
+    if (typeof window.getPortalRange === 'function') {
+      try {
+        var rd = window.getPortalRange(d);
+        if (rd && typeof rd === 'object' && typeof rd.range === 'number') return rd.range;
+        if (typeof rd === 'number') return rd;
+      } catch (e) { /* fall through */ }
+    }
+    return 160 * Math.pow(meanLevel, 4);
   };
 
   // Sum-of-energies / sum-of-max — matches in-game "portal health".
@@ -331,32 +358,38 @@ function wrapper(plugin_info) {
     var level    = d.level || 0;
     var health   = d.health != null ? Math.round(d.health) : Math.round(self.portalHealth(resos));
     var mean     = self.meanResoLevel(resos);
-    var range    = 160 * Math.pow(mean, 4);
+    var range    = self.getRange(d, mean);
     var links    = self.countLinks(portal.guid);
     var relation = self.portalRelation(d.team);
     var eff      = self.modEffects(mods, relation);
 
-    var ownerC   = self.colorize(owner,   teamCol);
-    var teamC    = self.colorize(teamTag, teamCol);
+    var ownerC = self.colorize(owner,   teamCol);
+    var teamC  = self.colorize(teamTag, teamCol);
 
     var body = [];
     body.push('Owner: ' + ownerC + ' (L' + level + ', ' + teamC + ')  ·  Health: ' + health + '%');
     body.push('Range: ' + self.formatRange(range) + '  ·  Links: ' + links.out + ' out / ' + links.in + ' in');
 
     body.push('Resonators:');
-    for (var i = 0; i < 8; i++) {
-      var r = resos[i];
-      var label = self.padRight(self.OCTANTS[i], 2);
-      if (!r) {
-        body.push('  ' + label + ': —');
-        continue;
-      }
-      var max   = self.RESO_MAX[r.level] || 1;
-      var pct   = Math.round((r.energy / max) * 100);
-      var lvl   = 'L' + r.level;
-      // Resonators always match portal team, so reuse teamCol for the agent.
-      var agent = self.colorize(r.owner || '?', teamCol);
-      body.push('  ' + label + ': ' + lvl + ' ' + agent + ' ' + self.padLeft(pct + '%', 4));
+    // Two-column compass layout, top to bottom.
+    var ROW_PAIRS = [
+      [2, 1],  // N , NE
+      [3, 0],  // NW, E
+      [4, 7],  // W , SE
+      [5, 6]   // SW, S
+    ];
+    var cells = ROW_PAIRS.map(function (pair) {
+      return [
+        self.formatResoCell(resos[pair[0]], pair[0], teamCol),
+        self.formatResoCell(resos[pair[1]], pair[1], teamCol)
+      ];
+    });
+    var leftWidth = 0;
+    for (var ci = 0; ci < cells.length; ci++) {
+      leftWidth = Math.max(leftWidth, self.visibleLen(cells[ci][0]));
+    }
+    for (var ri = 0; ri < cells.length; ri++) {
+      body.push('  ' + self.padCell(cells[ri][0], leftWidth) + '   ' + cells[ri][1]);
     }
 
     var modStrs = [];
@@ -366,19 +399,24 @@ function wrapper(plugin_info) {
       var abbr = self.MOD_ABBREV[mm.name] || mm.name;
       var rar  = self.normalizeRarity(mm.rarity);
       var rs   = self.RARITY_ABBREV[rar] || rar;
-      // Mods can only be installed on a friendly portal, so installer
-      // shares the portal's team colour.
-      var installer = self.colorize(mm.owner || '?', teamCol);
-      modStrs.push(abbr + '-' + rs + ' (' + installer + ')');
+      modStrs.push(abbr + '-' + rs);
     }
     body.push('Mods: ' + (modStrs.length ? modStrs.join(' · ') : '—'));
 
-    var relC = self.colorize(self.relationLabel(relation), self.relationColor(relation));
     body.push('Effects: ' + eff.maxOut + ' max outbound · ' +
               eff.maxHacks + ' hacks · ' +
-              self.formatCooldown(eff.cooldown) + ' cooldown (' + relC + ')');
+              self.formatCooldown(eff.cooldown) + ' cooldown');
 
     return header + '\n```ansi\n' + body.join('\n') + '\n```';
+  };
+
+  self.formatResoCell = function (r, idx, teamCol) {
+    var label = self.padRight(self.OCTANTS[idx], 2);
+    if (!r) return label + ': —';
+    var max   = self.RESO_MAX[r.level] || 1;
+    var pct   = Math.round((r.energy / max) * 100);
+    var agent = self.colorize(r.owner || '?', teamCol);
+    return label + ': L' + r.level + ' ' + agent + ' ' + self.padLeft(pct + '%', 4);
   };
 
   // ---- clipboard ------------------------------------------------------------

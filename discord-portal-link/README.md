@@ -27,15 +27,16 @@ Requires IITC-CE and a userscript manager (Tampermonkey or Violentmonkey).
 Owner: AgentX (L8, RES)  ·  Health: 96%
 Range: 4.21 km  ·  Links: 7 out / 3 in
 Resonators:
-  E : L8 AgentX 100%
-  NE: L8 AgentY  95%
-  ...
-Mods: SBUL-VR (AgentX) · MH-R (AgentY) · HS-VR (AgentX) · —
-Effects: 16 max outbound · 12 hacks · 0:54 cooldown (friendly)
+  N : L8 AgentX 100%   NE: L8 AgentY  95%
+  NW: L7 AgentZ  88%   E : L8 AgentA  91%
+  W : L8 AgentB 100%   SE: L6 AgentC  70%
+  SW: L8 AgentD  99%   S : L7 AgentE  82%
+Mods: SBUL-VR · MH-R · HS-VR · —
+Effects: 16 max outbound · 12 hacks · 0:54 cooldown
 ` ` `
 ```
 
-The body sits in a Discord `ansi`-tagged code block so agent names and team tags render in faction colour:
+The body sits in a Discord `ansi`-tagged code block so agent names and the team tag render in bold faction colour:
 
 | Team | Colour |
 |---|---|
@@ -44,15 +45,17 @@ The body sits in a Discord `ansi`-tagged code block so agent names and team tags
 | NEU | yellow (closest 8-colour proxy for orange) |
 | MAC (Machina) | red |
 
-The `(friendly)` / `(enemy)` / `(neutral)` / `(machina)` tag on the **Effects** line is coloured to match its relation. Discord on older mobile clients may render the raw ANSI escape codes instead of suppressing them — a cosmetic-only regression on those builds.
+Discord on older mobile clients may render the raw ANSI escape codes instead of applying them — a cosmetic-only regression on those builds.
 
-The header link wraps the URL in `<…>` so Discord won't generate a preview embed for the detailed paste.
+Both the quick link and the detailed-paste header wrap the URL in `<…>` so Discord won't generate a preview embed.
+
+Resonators are listed in a two-column compass layout (N/NE, NW/E, W/SE, SW/S), top to bottom. The link-range value is pulled from IITC's own `getPortalRange()` so it matches the portal panel and the intel map, including Link Amp boosts.
 
 The **Effects** line reflects the actual values implied by installed mods:
 
 - **Max outbound links** — default 8; each SBUL adds +8.
 - **Hacks before burnout** — default 4; Multi-hack adds +4 (Common), +8 (Rare), or +12 (Very Rare).
-- **Hack cooldown** — base depends on your faction vs the portal's team: **3:00** for a friendly portal, **5:00** for an enemy, neutral, or Machina portal. Heat Sink then multiplies the base by 0.8 (C), 0.5 (R), or 0.3 (VR), stacking multiplicatively. The label in parentheses on the **Effects** line shows which base was used; it reads `(faction unknown)` if IITC hasn't populated `window.PLAYER` yet.
+- **Hack cooldown** — base depends on your faction vs the portal's team: **3:00** for a friendly portal, **5:00** for an enemy, neutral, or Machina portal. Heat Sink then multiplies the base by 0.8 (C), 0.5 (R), or 0.3 (VR), stacking multiplicatively. The cooldown base is not labelled in the paste because the team-coloured team tag already conveys the relation.
 
 ## Notes
 
