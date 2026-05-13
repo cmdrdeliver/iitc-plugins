@@ -8,6 +8,7 @@ A collection of plugins for [IITC-CE](https://iitc.app/) — the Ingress Intel T
 |---|---|---|
 | [nearest-portals](nearest-portals/) | List the closest portals matching a status (visited / captured / scouted), export them, and plan a multi-stop route between them via OSRM. | [Install](https://raw.githubusercontent.com/cmdrdeliver/iitc-plugins/main/nearest-portals/nearest-portals.user.js) |
 | [live-inventory](live-inventory/) | Show your in-game inventory (CORE required). Fork of DanielOnDiordna's plugin that keeps the previously cached inventory when the Intel API returns an empty result. | [Install](https://raw.githubusercontent.com/cmdrdeliver/iitc-plugins/main/live-inventory/live-inventory.user.js) |
+| [discord-portal-link](discord-portal-link/) | Adds a Discord-icon button to the portal details panel that copies a Discord-flavoured markdown link (`[name](intel-url)`) to the clipboard. | [Install](https://raw.githubusercontent.com/cmdrdeliver/iitc-plugins/main/discord-portal-link/discord-portal-link.user.js) |
 
 ## Installing
 
