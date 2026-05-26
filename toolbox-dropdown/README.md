@@ -2,7 +2,21 @@
 
 Moves the Toolbox from the Sidebar Portal View to a Layers style hover-to-open menu and hides the toolbox items. New tools added after toolbox-dropdown is initialized will be added automatically.
 
-A small 🧰 button appears to the left of the layers control on the map. Hover it to expand a vertical list of every plugin entry that would normally appear in IITC's sidebar toolbox strip. Click one to open it; the menu collapses automatically.
+A small toolbox button appears to the left of the layers control on the map. Hover it to expand a vertical list of every plugin entry that would normally appear in IITC's sidebar toolbox strip. Click one to open it; the menu collapses automatically.
+
+## Screenshots
+
+**Closed — toolbox icon sits to the left of the layers control, top-right of the map:**
+
+![Toolbox button collapsed, sitting to the left of the layers control](images/closed.png)
+
+**Open — hover the toolbox to expand the plugin list:**
+
+![Toolbox menu expanded, showing About toolbox-dropdown pinned at the top followed by alphabetical entries](images/opened.png)
+
+**About dialog — opened from the synthetic "About toolbox-dropdown" entry at the top of the menu:**
+
+![About dialog: title + version, author, description, and "Moved N items from the #toolbox" status line](images/about.png)
 
 ## Behavior
 
