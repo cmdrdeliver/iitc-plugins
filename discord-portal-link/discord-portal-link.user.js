@@ -2,7 +2,7 @@
 // @id             iitc-plugin-discord-portal-link@cmdrdeliver
 // @name           IITC plugin: Discord portal link
 // @category       Info
-// @version        0.9.20260527
+// @version        0.10.20260527
 // @author         CmdrDeLiver
 // @namespace      https://github.com/cmdrdeliver/iitc-plugins
 // @description    Adds a clickable Discord icon to the portal details panel. Click for a popup menu: quick markdown link or a detailed Discord paste (owner, range, links, resonators, mods, computed effects).
@@ -16,6 +16,13 @@
 /* ---------------------------------------------------------------------------
  * Version history
  * ---------------------------------------------------------------------------
+ * 0.10.20260527
+ *   - Added an "About…" entry to the popup menu that opens an IITC
+ *     dialog with the plugin name, version, author, a short usage
+ *     guide, and notes on the ANSI/colour behaviour. Version is read
+ *     from plugin_info.script.version when available, with the
+ *     hardcoded number as a fallback.
+ *
  * 0.9.20260527
  *   - Quick "Copy link" output is now bold ("**[name](<url>)**"), matching
  *     the detailed-paste header.
@@ -111,8 +118,15 @@ function wrapper(plugin_info) {
 
   var self = window.plugin.discordPortalLink = function () {};
 
-  self.BTN_ID = 'dpl-copy-btn';
+  self.BTN_ID  = 'dpl-copy-btn';
   self.MENU_ID = 'dpl-menu';
+
+  // About-box metadata. Prefer plugin_info.script.version when present
+  // (populated by Tampermonkey / Greasemonkey via GM_info); fall back to
+  // the hardcoded version for installs that don't expose it.
+  self.PLUGIN_NAME    = 'Discord Portal Link';
+  self.PLUGIN_VERSION = (plugin_info && plugin_info.script && plugin_info.script.version) || '0.10.20260527';
+  self.PLUGIN_AUTHOR  = 'CmdrDeLiver';
 
   // Discord brand mark, simplified path. Rendered inline so we don't
   // depend on any external CDN and stay friendly to userscript sandboxes.
@@ -174,6 +188,12 @@ function wrapper(plugin_info) {
   self.escapeMd = function (s) {
     // Just keep "]" and "\" safe inside the link label.
     return String(s).replace(/\\/g, '\\\\').replace(/\]/g, '\\]');
+  };
+
+  self.escapeHtml = function (s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
   };
 
   self.intelUrl = function (portal) {
@@ -524,7 +544,8 @@ function wrapper(plugin_info) {
     menu.style.left = rect.left + 'px';
     menu.innerHTML =
       '<li data-action="quick">Copy link</li>' +
-      '<li data-action="detailed">Copy detailed paste</li>';
+      '<li data-action="detailed">Copy detailed paste</li>' +
+      '<li class="dpl-sep" data-action="about">About…</li>';
     menu.addEventListener('click', function (ev) {
       var li = ev.target.closest && ev.target.closest('li[data-action]');
       if (!li) return;
@@ -545,6 +566,7 @@ function wrapper(plugin_info) {
   };
 
   self.performAction = function (action, btn) {
+    if (action === 'about') { self.openAboutDialog(); return; }
     var portal = self.getCurrentPortal();
     if (!portal) {
       self.flashButton(btn, 'No portal selected', 'dpl-bad');
@@ -559,6 +581,45 @@ function wrapper(plugin_info) {
     }).catch(function (err) {
       console.warn('[discord-portal-link] copy failed:', err);
       self.flashButton(btn, 'Copy failed', 'dpl-bad');
+    });
+  };
+
+  // ---- About dialog ---------------------------------------------------------
+
+  self.openAboutDialog = function () {
+    var esc = self.escapeHtml;
+    var html =
+      '<div style="min-width:380px;max-width:520px;line-height:1.4;">' +
+
+      '<p style="margin:0 0 4px;"><b>' + esc(self.PLUGIN_NAME) + '</b>' +
+        ' <span style="opacity:0.75;font-size:90%;">v' + esc(self.PLUGIN_VERSION) + '</span></p>' +
+      '<p style="margin:0 0 10px;opacity:0.85;font-size:90%;">by ' + esc(self.PLUGIN_AUTHOR) + '</p>' +
+
+      '<p style="margin:0 0 10px;">Copies a Discord-formatted reference for the currently selected portal to your clipboard. Pick either a one-line bold markdown link or a multi-line readout with owner, resonators, mods, and the mod-computed effects from IITC\'s portal panel.</p>' +
+
+      '<p style="margin:8px 0 4px;"><b>How to use</b></p>' +
+      '<ol style="margin:0 0 10px;padding-left:20px;">' +
+        '<li>Click any portal on the intel map to open its details panel.</li>' +
+        '<li>Click the Discord-logo icon next to the portal name.</li>' +
+        '<li>Pick <b>Copy link</b> for a short bold markdown link, or <b>Copy detailed paste</b> for the full readout.</li>' +
+        '<li>Paste into Discord. The link will not generate a preview embed (the URL is wrapped in <code>&lt;…&gt;</code>).</li>' +
+      '</ol>' +
+
+      '<p style="margin:8px 0 4px;"><b>Notes</b></p>' +
+      '<ul style="margin:0 0 10px;padding-left:20px;font-size:92%;">' +
+        '<li>The detailed paste lives in a Discord <code>ansi</code> code block so agent names and the team tag render in faction colour (RES blue, ENL green, NEU yellow, Machina red). Older mobile Discord clients may show raw escape codes — cosmetic only.</li>' +
+        '<li>Mod effect values (outbound cap, hacks, cooldown, burnout, range boost, shield, link defense, attack force / frequency / hit bonus) are read live from IITC\'s own <code>getMaxOutgoingLinks</code> / <code>getPortalHackDetails</code> / <code>getLinkAmpRangeBoost</code> / <code>getPortalShieldMitigation</code> / <code>getPortalLinkDefenseBoost</code> / <code>getPortalAttackValues</code>, so they match the portal panel.</li>' +
+        '<li>Hack cooldown reflects your faction relative to the portal automatically (180 s friendly vs 300 s enemy / neutral / Machina).</li>' +
+      '</ul>' +
+
+      '</div>';
+
+    window.dialog({
+      title: 'About — ' + self.PLUGIN_NAME,
+      id: 'discord-portal-link-about',
+      html: html,
+      width: 460,
+      buttons: { Close: function () { $(this).dialog('close'); } }
     });
   };
 
@@ -619,7 +680,8 @@ function wrapper(plugin_info) {
         'list-style:none;background:#1b1c20;border:1px solid #5865F2;border-radius:4px;' +
         'box-shadow:0 4px 12px rgba(0,0,0,0.4);font-size:12px;min-width:170px;}' +
       '#' + self.MENU_ID + ' li{padding:6px 12px;color:#e6e8ff;cursor:pointer;white-space:nowrap;}' +
-      '#' + self.MENU_ID + ' li:hover{background:#5865F2;color:#fff;}'
+      '#' + self.MENU_ID + ' li:hover{background:#5865F2;color:#fff;}' +
+      '#' + self.MENU_ID + ' li.dpl-sep{border-top:1px solid #2a2c34;margin-top:2px;padding-top:6px;opacity:0.85;}'
     ).appendTo('head');
 
     if (typeof window.addHook === 'function') {
