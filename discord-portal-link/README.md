@@ -13,7 +13,7 @@ Requires IITC-CE and a userscript manager (Tampermonkey or Violentmonkey).
 1. Click any portal on the intel map to open its details panel.
 2. Click the small Discord logo that appears next to the portal name (just under the search box).
 3. A popup menu offers two options:
-   - **Copy link** — short markdown link, e.g. `[Raintree Club Pool](https://intel.ingress.com/intel?pll=35.415014,-77.869791)`
+   - **Copy link** — short bold markdown link, e.g. `**[Raintree Club Pool](<https://intel.ingress.com/intel?pll=35.415014,-77.869791>)**`
    - **Copy detailed paste** — multi-line block with owner, team, level, health, computed link range, in/out link counts, all 8 resonators (octant, level, agent, energy %), all 4 mods, and the *computed effects* of the mods.
 4. Paste into Discord.
 

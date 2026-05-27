@@ -2,7 +2,7 @@
 // @id             iitc-plugin-discord-portal-link@cmdrdeliver
 // @name           IITC plugin: Discord portal link
 // @category       Info
-// @version        0.8.20260513
+// @version        0.9.20260527
 // @author         CmdrDeLiver
 // @namespace      https://github.com/cmdrdeliver/iitc-plugins
 // @description    Adds a clickable Discord icon to the portal details panel. Click for a popup menu: quick markdown link or a detailed Discord paste (owner, range, links, resonators, mods, computed effects).
@@ -16,6 +16,10 @@
 /* ---------------------------------------------------------------------------
  * Version history
  * ---------------------------------------------------------------------------
+ * 0.9.20260527
+ *   - Quick "Copy link" output is now bold ("**[name](<url>)**"), matching
+ *     the detailed-paste header.
+ *
  * 0.8.20260513
  *   - Effects block now delegates to IITC's own mod-stat functions
  *     (getMaxOutgoingLinks, getPortalHackDetails, getLinkAmpRangeBoost,
@@ -178,7 +182,7 @@ function wrapper(plugin_info) {
 
   self.buildDiscordLink = function (portal) {
     // Angle brackets around the URL suppress Discord's auto-embed preview.
-    return '[' + self.escapeMd(portal.title) + '](<' + self.intelUrl(portal) + '>)';
+    return '**[' + self.escapeMd(portal.title) + '](<' + self.intelUrl(portal) + '>)**';
   };
 
   self.teamLabel = function (t) {
