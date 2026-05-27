@@ -1,8 +1,8 @@
 // ==UserScript==
 // @author         EisFrei - fork by DanielOnDiordna - cached fork by CmdrDeLiver
-// @name           IITC plugin: Live Inventory (cached)
+// @name           IITC plugin: Live Inventory [c]
 // @category       Info
-// @version        0.0.19.20260511
+// @version        0.0.20.20260527
 // @homepageURL    https://github.com/cmdrdeliver/iitc-plugins
 // @updateURL      https://raw.githubusercontent.com/cmdrdeliver/iitc-plugins/main/live-inventory/live-inventory.user.js
 // @downloadURL    https://raw.githubusercontent.com/cmdrdeliver/iitc-plugins/main/live-inventory/live-inventory.user.js
@@ -23,13 +23,20 @@ function wrapper(plugin_info) {
     window.plugin.LiveInventory = function() {};
     var self = window.plugin.LiveInventory;
     self.id = 'LiveInventory';
-    self.titleDefault = 'Live Inventory';
-    self.titleCached = 'Live Inventory ⚠ CACHED';
+    self.titleDefault = 'Live Inventory [c]';
+    self.titleCached = 'Live Inventory [c] ⚠ CACHED';
     self.title = self.titleDefault;
-    self.version = '0.0.19.20260511';
+    self.version = '0.0.20.20260527';
     self.author = 'EisFrei - fork by DanielOnDiordna - cached fork by CmdrDeLiver';
     self.changelog = `
 Changelog:
+
+version 0.0.20.20260527
+- added a "[c]" marker to the plugin name, dialog title bars, and the
+  toolbox entry to make the caching fork visible at a glance.
+- the existing "⚠ CACHED" empty-result fallback marker is unaffected;
+  the bar now reads "Live Inventory [c] ⚠ CACHED" when the fallback is
+  active.
 
 version 0.0.19.20260511
 - added a per-row rename button in the Capsules table: click ✎ to rename
@@ -1851,7 +1858,7 @@ version 0.0.17.20210724.002500
         self.setupPortalsList();
 
         $('<a href="#">')
-            .text('Inventory')
+            .text('Inventory [c]')
             .click(self.menu)
             .appendTo($('#toolbox'));
 
